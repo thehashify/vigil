@@ -27,7 +27,8 @@ CSS = f"""
 @import url("https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap");
 :root {{ --ink:{INK}; --muted:{MUTED}; --line:{LINE}; --accent:{ACCENT}; --accent-soft:{ACCENT_SOFT};
         --saffron:{SAFFRON}; --surface:{SURFACE}; }}
-html, body, [class*="st-"], .stMarkdown, p, li, label {{ font-family: "IBM Plex Sans", system-ui, sans-serif; }}
+html, body, .stMarkdown, p, li, label, input, textarea, button, td, th {{ font-family: "IBM Plex Sans", system-ui, sans-serif; }}
+[data-testid="stIconMaterial"], .material-symbols-rounded {{ font-family: "Material Symbols Rounded" !important; }}
 h1, h2, h3, h4 {{ font-family: "Bricolage Grotesque", "IBM Plex Sans", sans-serif !important; letter-spacing: -0.01em; }}
 .block-container {{ padding-top: 2.2rem; padding-bottom: 4rem; max-width: 1220px; }}
 .stDeployButton, [data-testid="stAppDeployButton"] {{ display: none; }}
@@ -106,6 +107,24 @@ h1, h2, h3, h4 {{ font-family: "Bricolage Grotesque", "IBM Plex Sans", sans-seri
 .bar .fill {{ height: 100%; border-radius: 99px; transform-origin: left; animation: grow .9s cubic-bezier(.2,.7,.2,1) both; }}
 @keyframes grow {{ from {{ transform: scaleX(0); }} to {{ transform: scaleX(1); }} }}
 @media (prefers-reduced-motion: reduce) {{ .bar .fill {{ animation: none; }} }}
+
+/* gold plan */
+.hero.gold {{ background: radial-gradient(120% 140% at 0% 0%, #6b4a12 0%, #3f2b08 60%, #2a1c05 100%); color: #fbf1dc; }}
+.hero.gold::after {{ background: radial-gradient(circle, rgba(255,214,120,.45), rgba(255,214,120,0) 70%); }}
+.ring {{ width: 132px; height: 132px; border-radius: 50%; display: grid; place-items: center; flex: none; }}
+.ring .in {{ width: 100px; height: 100px; border-radius: 50%; background: #2f2006; display: grid; place-items: center;
+            text-align: center; line-height: 1.1; }}
+.ring .in b {{ font-family: "Bricolage Grotesque", sans-serif; font-size: 1.6rem; }}
+.months {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 8px; }}
+.mo {{ border-radius: 12px; padding: 8px 6px; text-align: center; font-size: .8rem; border: 1px solid var(--line); background: var(--surface); }}
+.mo .l {{ font-weight: 600; }}
+.mo .s {{ font-size: .72rem; margin-top: 2px; }}
+.mo.paid, .mo.double, .mo.covered {{ background: {GOOD_BG}; border-color: transparent; color: {GOOD}; }}
+.mo.due {{ background: {WARN_BG}; border-color: {SAFFRON}; color: {WARN}; box-shadow: 0 0 0 2px rgba(224,138,30,.25); }}
+.mo.missed {{ background: {BAD_BG}; border-color: transparent; color: {BAD}; }}
+.mo.upcoming {{ color: var(--muted); }}
+.kv {{ display: grid; grid-template-columns: 1fr auto; gap: 8px 16px; font-size: .95rem; }}
+.kv .t {{ border-top: 1px solid var(--line); padding-top: 8px; font-weight: 700; }}
 
 /* 52-week range */
 .range {{ margin-top: 6px; }}

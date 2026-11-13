@@ -19,7 +19,7 @@ import urllib.request
 
 import pandas as pd
 
-from core import ai, storage
+from core import ai, gold, storage
 from core.data import get_index, get_mf_nav, get_news, get_stock
 from core.scoring import score_stock
 
@@ -121,6 +121,25 @@ def main() -> None:
         if share > target + 10:
             line += "\nPut extra money into your index fund this month, not stocks."
         msgs.append(line)
+
+    # Gold savings plan: payment reminder 2 days before, and missed-payment warning
+    plan, pays = gold.load_plan(), gold.load_payments()
+    if plan.get("start_month") or not pays.empty:
+        sched = gold.schedule(plan, pays, today)
+        tone, health = gold.scheme_health(sched)
+        cur = next((s for s in sched if s.month == today.replace(day=1)), None)
+        due_day = min(int(plan.get("due_day", 10)), 28)
+        if cur and cur.status == "due":
+            owed = float(plan["monthly_amount"]) * (2 if tone == "warn" else 1)
+            due_date = today.replace(day=due_day)
+            if (due_date - today).days == 2:
+                msgs.append(f"🪙 Gold plan: {rs(owed)} is due on {due_date:%d %b}. "
+                            "Collect the receipt and add it in the app's Gold plan tab.")
+            elif (today - due_date).days == 7:
+                msgs.append(f"🪙 Gold plan: this month's {rs(owed)} hasn't been recorded yet. "
+                            "If you've paid, add the receipt in the app. If not, pay this month to stay in the scheme.")
+        if tone == "bad" and today.weekday() == 0:
+            msgs.append("🚨 Gold plan: " + health)
 
     if not msgs:
         print("Nothing worth messaging about today.")

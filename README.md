@@ -5,6 +5,8 @@ Your personal long-term investing dashboard for Indian stocks and index funds.
 - **Home**: what your money is worth, what to do this month, today's news, and your holdings
 - **Stock check**: a 0–10 scorecard and plain-English verdict for any NSE company
 - **Find ideas**: ranks your watchlist or 50 large companies on the same checklist
+- **Gold plan**: tracks a jeweller's monthly gold savings scheme: grams locked in, value today, the
+  12-month calendar (with the "miss at most 1 month" rule), and what your jewellery will cost at the end
 - **My money**: enter your holdings, watchlist and monthly SIP plan
 - **Learn**: the basics, and how to read the scores
 - **Telegram alerts** (optional): a message on your phone only when something matters
@@ -81,6 +83,21 @@ The job runs automatically at 6:45 PM IST on weekdays. It only messages you when
 
 ---
 
+## Gold plan
+For a jeweller scheme where each monthly payment buys 24K gold at that day's rate.
+1. Open the **Gold plan** tab → **⚙️ Plan settings**: jeweller name, monthly amount, number of months,
+   first payment month and your usual payment day. Save.
+2. After every payment, add a row under **Your payments** from the receipt: date, amount, the 24K rate,
+   and grams if the receipt shows them. Press **Save payments**.
+3. Move the **making charge** slider to the % the jeweller quotes for the piece you like. The app shows the
+   extra cash you'll pay at the end (making + 3% GST), or how heavy a piece you can take with nothing extra.
+
+Today's rate is estimated from the international gold price, adjusted to match the rates on your own
+receipts. For an exact figure, type the jeweller's rate into Plan settings.
+If Telegram is set up, you also get a reminder 2 days before each payment and a nudge if one isn't recorded.
+
+---
+
 ## How the scorecard works
 Each company gets five scores out of 10:
 
@@ -99,4 +116,5 @@ All the rules are in `core/scoring.py`.
 - `app.py`: the website
 - `alerts.py` + `.github/workflows/alerts.yml`: the daily Telegram job
 - `core/`: data fetching, scoring, AI summaries, saving
-- `data/`: your portfolio, watchlist and plan
+- `core/gold.py`: gold plan calculations
+- `data/`: your portfolio, watchlist, plan, and gold plan + payments

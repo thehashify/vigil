@@ -10,7 +10,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from core import ai, storage, ui
+from core import ai, gold, storage, ui
 from core.data import get_index, get_mf_history, get_mf_nav, get_news, get_stock, search_mutual_funds
 from core.scoring import score_stock
 
@@ -58,7 +58,8 @@ def pct(x: float | None) -> str:
 
 
 def html(s: str) -> None:
-    st.markdown(s, unsafe_allow_html=True)
+    # Markdown ends an HTML block at a blank line, so drop blank lines (e.g. from empty placeholders).
+    st.markdown("\n".join(line for line in s.splitlines() if line.strip()), unsafe_allow_html=True)
 
 
 def section(title: str, note: str = "") -> None:
@@ -201,8 +202,8 @@ if settings.get("example_data"):
     st.info("**You're looking at example holdings.** Go to the **My money** tab to enter your real "
             "investments, then untick *Show example banner*.", icon="ℹ️")
 
-tab_home, tab_stock, tab_ideas, tab_money, tab_learn = st.tabs(
-    ["🏠 Home", "🔎 Stock check", "💡 Find ideas", "💼 My money", "📘 Learn"]
+tab_home, tab_stock, tab_ideas, tab_gold, tab_money, tab_learn = st.tabs(
+    ["🏠 Home", "🔎 Stock check", "💡 Find ideas", "🪙 Gold plan", "💼 My money", "📘 Learn"]
 )
 
 
@@ -626,6 +627,230 @@ with tab_ideas:
                 })
             st.caption("Quality = profitable and growing · Health = low debt · Value = price vs profits · "
                        "Trend = price direction. Scores are a checklist, not a prediction.")
+
+
+# ================= GOLD PLAN =================
+@st.cache_data(ttl=1800, show_spinner=False)
+def cached_intl_gold():
+    try:
+        return gold.intl_gold_inr_per_gram("2y")
+    except Exception:
+        return pd.Series(dtype=float)
+
+
+with tab_gold:
+    plan = gold.load_plan()
+    pays = gold.load_payments()
+    intl = cached_intl_gold()
+    today = now_ist.date()
+
+    premium = gold.jeweller_premium(pays, intl)
+    if plan.get("manual_rate_today"):
+        rate_today, rate_src = float(plan["manual_rate_today"]), "your jeweller's rate (entered by you)"
+    elif not intl.empty and premium:
+        rate_today = float(intl.iloc[-1]) * premium
+        rate_src = f"estimated: international price adjusted to your jeweller's rate ({(premium - 1) * 100:+.1f}%)"
+    elif not intl.empty:
+        rate_today = float(intl.iloc[-1])
+        rate_src = "international price. Jewellers in India usually charge a few % more; enter their rate below for accuracy"
+    else:
+        rate_today, rate_src = None, "unavailable right now"
+
+    monthly = float(plan["monthly_amount"])
+    months = int(plan["months"])
+    sched = gold.schedule(plan, pays, today)
+    paid_total = float(pays["amount"].sum()) if not pays.empty else 0.0
+    grams = float(pays["grams"].sum()) if not pays.empty else 0.0
+    months_done = sum(1 for s in sched if s.status in ("paid", "double", "covered"))
+    remaining_amt = max(0.0, monthly * months - paid_total)
+    worth = grams * rate_today if rate_today else None
+    avg_rate = paid_total / grams if grams else None
+    proj_grams = grams + (remaining_amt / rate_today if rate_today else 0)
+    end_month = sched[-1].month if sched else today
+    title = f"{plan['jeweller']} gold plan" if plan.get("jeweller") else "Gold savings plan"
+
+    # ---- hero ----
+    c1, c2 = st.columns([7, 5], gap="medium")
+    with c1:
+        pct_done = months_done / months * 100 if months else 0
+        gain = (worth - paid_total) if (worth is not None and paid_total) else None
+        gain_txt = (f'<span class="chip">{ui.signed(gain / paid_total * 100)} · <b>{inr(gain)}</b> vs what you paid</span>'
+                    if gain is not None else "")
+        html(f"""
+<div class="hero gold rise" style="display:flex;gap:22px;align-items:center;flex-wrap:wrap">
+  <div class="ring" style="background:conic-gradient(#f5c451 {pct_done:.1f}%, rgba(255,255,255,.14) 0)">
+    <div class="in"><div><b>{months_done}/{months}</b><br><span style="font-size:.75rem;opacity:.8">months paid</span></div></div>
+  </div>
+  <div style="min-width:0;flex:1;position:relative;z-index:1">
+    <div class="label">{ui.esc(title)} · {plan.get('karat', 24)}K</div>
+    <div class="big">{grams:,.3f} g</div>
+    <div class="chips">
+      <span class="chip">Paid <b>{inr(paid_total)}</b> of {inr(monthly * months)}</span>
+      <span class="chip">Worth today <b>{inr(worth)}</b></span>
+      {gain_txt}
+    </div>
+  </div>
+</div>""")
+    with c2:
+        tone, msg = gold.scheme_health(sched)
+        nxt = next((s for s in sched if s.status in ("due", "upcoming")), None)
+        fg, bg = ui.TONES[tone]
+        if nxt:
+            due_date = nxt.month.replace(day=min(int(plan.get("due_day", 10)), 28))
+            owed = monthly * (2 if tone == "warn" else 1)
+            days = (due_date - today).days
+            when = ("today" if days == 0 else
+                    "date passed, not recorded yet" if days < 0 else f"in {days} days")
+            next_html = (f'<div style="font-size:.8rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)">Next payment</div>'
+                         f'<div class="num" style="font-size:1.9rem;font-weight:800">{inr(owed)}</div>'
+                         f'<div>{due_date:%d %b %Y} · <b>{when}</b></div>')
+        else:
+            next_html = (f'<div style="font-size:.8rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)">Plan complete</div>'
+                         f'<div class="num" style="font-size:1.6rem;font-weight:800">Ready to redeem</div>'
+                         f'<div>You can take your jewellery or coins now.</div>')
+        html(f'<div class="card rise" style="height:100%">{next_html}'
+             f'<div class="verdict" style="background:{bg};color:{fg};padding:10px 14px;margin-top:12px;font-size:.92rem">'
+             f'{ui.esc(msg)}</div>'
+             f'<div style="color:var(--muted);font-size:.85rem;margin-top:10px">Today\'s 24K rate: '
+             f'<b style="color:var(--ink)">{inr(rate_today)}/g</b><br>{ui.esc(rate_src)}</div></div>')
+
+    if pays.empty and not plan.get("start_month"):
+        st.info("**Getting started:** open **⚙️ Plan settings** below to set your jeweller and first payment month, "
+                "then add each receipt under **Your payments**. Until then, the numbers below are a projection "
+                "at today's rate.", icon="🪙")
+
+    # ---- timeline ----
+    section("Your 12 months", f"ends {end_month:%b %Y} · miss at most 1 month, then pay double")
+    label = {"paid": "✓ paid", "double": "✓ ×2 paid", "covered": "covered", "due": "due now",
+             "missed": "missed", "upcoming": "upcoming"}
+    chips = "".join(
+        f'<div class="mo {s.status} rise" style="animation-delay:{k * 0.03:.2f}s"><div class="l">{s.label}</div>'
+        f'<div class="s">{label[s.status]}</div></div>' for k, s in enumerate(sched))
+    html(f'<div class="months">{chips}</div>')
+
+    # ---- price chart ----
+    if not intl.empty:
+        section("Gold price and your buys", "your rate each month vs the market")
+        start = pd.Timestamp(sched[0].month) - pd.Timedelta(days=60) if sched else intl.index[-1] - pd.Timedelta(days=365)
+        line = intl.loc[start:] * (premium or 1.0)
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=line.index, y=line.values, mode="lines", name="24K rate",
+                                 line=dict(color="#c8962e", width=2.4, shape="spline"), fill="tozeroy",
+                                 fillcolor="rgba(200,150,46,.10)",
+                                 hovertemplate="%{x|%d %b %Y}<br>₹%{y:,.0f}/g<extra></extra>"))
+        if not pays.empty and pays["rate_per_g"].notna().any():
+            pr = pays.dropna(subset=["rate_per_g"])
+            fig.add_trace(go.Scatter(
+                x=pr["date"], y=pr["rate_per_g"], mode="markers", name="Your buys",
+                marker=dict(size=13, color="#6b4a12", line=dict(color="#fff", width=2)),
+                customdata=pr[["amount", "grams"]].values,
+                hovertemplate="%{x|%d %b %Y}<br>Paid ₹%{customdata[0]:,.0f} at ₹%{y:,.0f}/g"
+                              "<br>Got %{customdata[1]:.3f} g<extra></extra>"))
+        if avg_rate:
+            fig.add_hline(y=avg_rate, line=dict(color=ui.ACCENT, dash="dot", width=1.5),
+                          annotation_text=f"your average ₹{avg_rate:,.0f}/g", annotation_position="top left",
+                          annotation_font=dict(color=ui.ACCENT))
+        lo, hi = float(line.min()), float(line.max())
+        fig.update_yaxes(range=[lo * 0.93, hi * 1.05], tickprefix="₹", tickformat=",.0f")
+        plot_layout(fig, 300)
+        fig.update_layout(hovermode="closest", showlegend=False)
+        st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+        st.caption("Buying the same amount every month means you get more grams when gold is cheaper and fewer "
+                   "when it's expensive, so your average lands in the middle.")
+
+    # ---- end of plan ----
+    section("At the end of the plan", "estimate at today's rate; making charge depends on the design")
+    a, b = st.columns([5, 7], gap="medium")
+    with a:
+        making = st.slider("Making charge for the piece you want (%)", 0.0, 25.0,
+                           float(plan.get("making_charge_pct", 8.0)), 0.5,
+                           help="Coins are usually 0–3%. Simple chains and bangles are often lower than "
+                                "detailed designs. Ask the jeweller for the exact % before choosing.")
+        if rate_today:
+            est = gold.purchase_estimate(proj_grams, rate_today, making)
+            html(f"""
+<div class="card rise"><div class="kv">
+  <span>Gold you'll have saved</span><b class="num">{proj_grams:,.3f} g</b>
+  <span>Value of that gold today</span><span class="num">{inr(est['gold_value'])}</span>
+  <span>Making charge ({making:g}%)</span><span class="num">+ {inr(est['making'])}</span>
+  <span>GST (3%) at purchase</span><span class="num">+ {inr(est['gst'])}</span>
+  <span class="t">Extra cash to pay at the end</span><b class="t num" style="color:{ui.WARN}">{inr(est['extra_to_pay'])}</b>
+</div>
+<div style="color:var(--muted);font-size:.88rem;margin-top:12px">Don't want to pay anything extra? Choose a piece of
+about <b style="color:var(--ink)">{gold.grams_for_budget(proj_grams, making):,.2f} g</b> and the saved gold covers
+the making charge and GST too.</div></div>""")
+            if remaining_amt > 0:
+                st.caption(f"Assumes your remaining {inr(remaining_amt)} buys gold at today's rate.")
+    with b:
+        if rate_today:
+            rows = []
+            for m in [0, 3, 8, 12, 18, 25]:
+                e = gold.purchase_estimate(proj_grams, rate_today, m)
+                rows.append({"Making %": m, "Example": {0: "Gold coin/bar (some jewellers)", 3: "Coin / plain bar",
+                                                         8: "Plain chain, simple bangle", 12: "Regular jewellery",
+                                                         18: "Detailed design", 25: "Antique / heavy work"}[m],
+                             "Extra to pay": e["extra_to_pay"],
+                             "Grams with no extra": gold.grams_for_budget(proj_grams, m)})
+            st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch", column_config={
+                "Making %": st.column_config.NumberColumn(format="%d%%"),
+                "Extra to pay": st.column_config.NumberColumn(format="₹%,.0f"),
+                "Grams with no extra": st.column_config.NumberColumn(format="%.2f g"),
+            })
+            st.caption("Example making charges are typical ranges, not your jeweller's. Always ask before choosing.")
+
+    # ---- payments ----
+    section("Your payments", "copy these from each receipt")
+    if pays.empty:
+        st.info("No payments added yet. Add a row for each monthly payment: date, amount, and the 24K rate on "
+                "the receipt. If the receipt shows grams, enter those too (they're used instead of the calculation).",
+                icon="🧾")
+    edit = pays.copy()
+    edit["date"] = edit["date"].dt.date
+    edited = st.data_editor(
+        edit, num_rows="dynamic", hide_index=True, width="stretch", key="gold_editor",
+        column_config={
+            "date": st.column_config.DateColumn("Date paid", format="DD MMM YYYY", required=True),
+            "amount": st.column_config.NumberColumn("Amount ₹", min_value=0, step=500, format="₹%,.0f", required=True),
+            "rate_per_g": st.column_config.NumberColumn("24K rate ₹/g", min_value=0, format="₹%,.2f"),
+            "grams": st.column_config.NumberColumn("Grams (from receipt)", min_value=0, format="%.3f",
+                                                   help="Leave blank to calculate amount ÷ rate"),
+            "receipt_no": st.column_config.TextColumn("Receipt no."),
+        })
+    if st.button("💾 Save payments", type="primary"):
+        msg = gold.save_payments(edited)
+        st.success(f"Saved: {msg}.")
+        st.rerun()
+
+    with st.expander("⚙️ Plan settings"):
+        s1, s2, s3 = st.columns(3)
+        jeweller = s1.text_input("Jeweller", value=plan.get("jeweller", ""))
+        amt = s2.number_input("Monthly amount ₹", min_value=0, step=500, value=int(plan["monthly_amount"]))
+        n = s3.number_input("Number of months", min_value=1, max_value=24, value=int(plan["months"]))
+        s4, s5, s6 = st.columns(3)
+        start_default = (dt.datetime.strptime(plan["start_month"], "%Y-%m").date() if plan.get("start_month")
+                         else (pays["date"].iloc[0].date() if not pays.empty else today))
+        start_m = s4.date_input("First payment month", value=start_default)
+        due = s5.number_input("Usual payment day", min_value=1, max_value=28, value=int(plan.get("due_day", 10)))
+        manual = s6.number_input("Jeweller's 24K rate today ₹/g (optional)", min_value=0.0, step=10.0,
+                                 value=float(plan.get("manual_rate_today") or 0.0),
+                                 help="Leave at 0 to use the automatic estimate.")
+        if st.button("💾 Save plan settings"):
+            msg = gold.save_plan({**plan, "jeweller": jeweller, "monthly_amount": amt, "months": n,
+                                  "start_month": start_m.strftime("%Y-%m"), "due_day": due,
+                                  "making_charge_pct": making, "manual_rate_today": manual or None})
+            st.success(f"Saved: {msg}.")
+            st.rerun()
+
+    html(f"""
+<div class="card" style="margin-top:18px;background:{ui.ACCENT_SOFT};border-color:transparent">
+<b>Good to know</b>
+<ul style="margin:8px 0 0">
+<li>Keep every receipt until you collect your jewellery. They're your only proof of the grams you've locked in.</li>
+<li>Missed a month? Pay double the next month. Two missed months in a row ends the scheme.</li>
+<li>You can't redeem early. After the last month you can take jewellery, coins or anything else.</li>
+<li>Jewellery is great to wear, but selling it back usually loses the making charge. For gold as an
+investment, a Gold ETF is cheaper and easier to sell.</li>
+</ul></div>""")
 
 
 # ================= MY MONEY =================
