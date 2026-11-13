@@ -1,0 +1,6 @@
+{
+  "monthly_sip": 5000,
+  "sip_day": 15,
+  "target_stock_share": 25,
+  "example_data": true
+}

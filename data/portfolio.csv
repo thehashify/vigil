@@ -1,0 +1,5 @@
+type,symbol,name,quantity,avg_price,scheme_code,invested
+fund,,UTI Nifty 50 Index Fund - Direct Growth,470,163.80,120716,77000
+stock,HDFCBANK,HDFC Bank,15,780,,
+stock,INFY,Infosys,10,1100,,
+stock,ITC,ITC,25,400,,
